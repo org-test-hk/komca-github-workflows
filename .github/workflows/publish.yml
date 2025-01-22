@@ -4,7 +4,7 @@ name: Publish Package
 on:
   workflow_call: 
     secrets: 
-      GITHUB_TOKEN:
+      ORG_GITHUB_PAT:
         required: true
   push:
     branches: [main]

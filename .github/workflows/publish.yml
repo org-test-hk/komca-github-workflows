@@ -3,6 +3,9 @@ name: Publish Package
 
 on:
   workflow_call: 
+    secrets: 
+      GITHUB_TOKEN:
+        required: true
   push:
     branches: [main]
 

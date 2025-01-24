@@ -1,32 +1,21 @@
-# .github/workflows/publish.yml
 name: Publish Package
-
 on:
-  workflow_call: 
-    secrets: 
+  workflow_call:
+    secrets:
       ORG_GITHUB_PAT:
         required: true
   push:
     branches: [main]
-
 jobs:
-  build-and-publish:
+  version-check:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      packages: write
+    outputs:
+      new_version: ${{ steps.tag_version.outputs.new_version }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'adopt'
-
-      - name: Generate new version
+      - name: Calculate next version
         id: tag_version
         uses: mathieudutour/github-tag-action@v6.1
         with:
@@ -34,6 +23,7 @@ jobs:
           default_bump: patch
           release_branches: main
           tag_prefix: "v"
+          dry_run: true
           custom_release_rules: |
             major:major:Major Changes
             BREAKING CHANGE:major:Breaking Changes
@@ -53,30 +43,47 @@ jobs:
             style:patch:Styling
             test:patch:Testing
 
+  build-and-publish:
+    needs: version-check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'adopt'
       - name: Update version in build.gradle.kts
         run: |
-          sed -i "s/version = \".*\"/version = \"${{ steps.tag_version.outputs.new_version }}\"/" build.gradle.kts
-
+          sed -i "s/version = \".*\"/version = \"${{ needs.version-check.outputs.new_version }}\"/" build.gradle.kts
       - name: Debug Credentials
         run: |
           echo "GITHUB_ACTOR: ${{ github.actor }}"
           echo "GITHUB_REPOSITORY: ${{ github.repository }}"
           echo "Has GITHUB_TOKEN: ${{ secrets.ORG_GITHUB_PAT != '' }}"
-
-      # GitHub Packages 인증 정보 설정 추가
       - name: Setup Gradle Authentication
         run: |
           mkdir -p ~/.gradle
           echo "gpr.user=KimMunjin" >> ~/.gradle/gradle.properties
           echo "gpr.key=${{ secrets.ORG_GITHUB_PAT }}" >> ~/.gradle/gradle.properties
-
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
-
       - name: Build and publish
         run: ./gradlew build publish -x test
         env:
           GITHUB_ACTOR: KimMunjin
           GITHUB_TOKEN: ${{ secrets.ORG_GITHUB_PAT }}
-          NEW_VERSION: ${{ steps.tag_version.outputs.new_version }}
+          NEW_VERSION: ${{ needs.version-check.outputs.new_version }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+      - name: Create version tag
+        if: success()
+        uses: mathieudutour/github-tag-action@v6.1
+        with:
+          github_token: ${{ secrets.ORG_GITHUB_PAT }}
+          custom_tag: ${{ needs.version-check.outputs.new_version }}
+          tag_prefix: "v"

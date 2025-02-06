@@ -6,6 +6,8 @@ on:
         required: true
   push:
     branches: [main]
+    paths-ignore:
+      - '.github/workflows/**'
 jobs:
   version-check:
     runs-on: ubuntu-latest
